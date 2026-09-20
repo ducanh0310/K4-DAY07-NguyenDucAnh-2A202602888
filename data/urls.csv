@@ -1,0 +1,13 @@
+url,doc_id,title,audience,category,language,document_version,license_or_permission
+https://ocsnext.ebay.com/help/buying/returns-refunds/ask-ebay-to-step-in?id=4701,buyer-ask-ebay-to-step-in,Người mua yêu cầu eBay can thiệp,buyer,case-escalation,vi,not-stated,public-source-summary
+https://www.ebay.com/help/buyanl/returns-refunds/return-item-refund?id=4041,buyer-return-item-refund,Người mua trả hàng để nhận hoàn tiền,buyer,return-process,vi,not-stated,public-source-summary
+https://www.ebay.com/help/policies/ebay/ebay?id=4210,ebay-money-back-guarantee,Bảo đảm hoàn tiền eBay,both,buyer-protection,vi,not-stated,public-source-summary
+https://example.com/policy/returns,return-refund-policy,Chính sách đổi trả và hoàn tiền,buyer,returns-policy,vi,not-stated,public-source-summary
+https://www.ebay.com/help/selling/managing-returns-refunds/ask-ebay-to-step-in?id=4702,seller-ask-ebay-to-step-in,Người bán yêu cầu eBay can thiệp,seller,case-escalation,vi,not-stated,public-source-summary
+https://ocsnext.ebay.com/help/selling/managing-returns-refunds/handling-return-requests?id=4115,seller-handle-return-request,Người bán xử lý yêu cầu đổi trả,seller,return-processing,vi,not-stated,public-source-summary
+https://www.ebay.com/help/selling/getting-paid/handling-chargebacks?id=4799,seller-handling-payment-disputes,Người bán xử lý tranh chấp thanh toán,seller,payment-dispute,vi,not-stated,public-source-summary
+https://www.ebay.com/help/policies/selling-policies/payment-est-seller-protections?id=5293,seller-payment-dispute-protection,Bảo vệ người bán trước tranh chấp thanh toán,seller,seller-protection,vi,not-stated,public-source-summary
+https://www.ebay.com/help/selling/managing-returns-refunds/refunding-buyers?id=5182,seller-refunding-buyers,Người bán hoàn tiền cho người mua,seller,refunds,vi,not-stated,public-source-summary
+https://www.ebay.com/help/Selling/Returns_Refunds/Setting_up_your_return_policy?id=4368,seller-return-policy-options,Thiết lập chính sách đổi trả cho người bán,seller,return-policy,vi,not-stated,public-source-summary
+https://www.ebay.com/help/Selling/Returns_Refunds/Return_shipping_for_sellers?id=4703,seller-return-shipping,Phí vận chuyển hoàn hàng dành cho người bán,seller,return-shipping,vi,not-stated,public-source-summary
+https://example.com/policy/seller-warranty,seller-warranty-policy,Chính sách bảo hành dành cho người bán,seller,warranty-policy,vi,not-stated,public-source-summary
