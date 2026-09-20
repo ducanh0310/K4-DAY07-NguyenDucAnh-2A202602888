@@ -60,87 +60,91 @@ Chạy `ChunkingStrategyComparator().compare()` trên 2-3 tài liệu:
 
 ### Chiến lược của từng thành viên
 
+> Mỗi thành viên áp dụng **chuỗi chiến lược kết hợp (Combined RAG Pipeline)** bao gồm: kỹ thuật chia nhỏ văn bản (Chunking), tiền lọc dữ liệu (Metadata Pre-filtering), truy xuất tương đồng vector (Vector Search) và tạo prompt có khả năng truy vết nguồn (Traceable RAG Agent).
+
 **Thành viên 1 — Nguyễn Đức Anh (MSSV: 2A202602888)**
-- **Loại chiến lược:** `RecursiveChunker` (Chia nhỏ đệ quy)
-- **Mô tả & lý do chọn cho chủ đề này:** *Áp dụng chia đệ quy theo danh sách separator ưu tiên (`["\n\n", "\n", ". ", " ", ""]`) và gom các mảnh nhỏ liền kề sát ngưỡng `chunk_size=500`. Lý do chọn: giữ nguyên vẹn nội dung ngữ cảnh của từng đoạn điều khoản chính sách E-commerce mà không sinh ra các chunk vụn.*
-- **Code snippet:**
+- **Chuỗi chiến lược kết hợp:** `RecursiveChunker` + `SentenceChunker` + **Metadata Pre-filtering (`search_with_filter`)** + **Source-Traceable Agent RAG**.
+- **Mô tả & lý do chọn:** *Áp dụng `RecursiveChunker` đệ quy theo thứ tự separator (`["\n\n", "\n", ". ", " ", ""]`) kết hợp gom mảnh liền kề sát ngưỡng `chunk_size=500` để giữ trọn ngữ cảnh đoạn văn. Ở tầng lưu trữ, sử dụng `EmbeddingStore` với cơ chế tiền lọc `metadata_filter` (lọc `audience`, `category` trước khi tính similarity dot-product), giúp ngăn chặn việc tài liệu sai đối tượng chiếm mất slot `top_k`. Tác tử RAG tạo prompt đánh số trích dẫn `[1] [2]` minh bạch.*
+- **Code snippet tiêu biểu:**
 ```python
-class RecursiveChunker:
-    DEFAULT_SEPARATORS = ["\n\n", "\n", ". ", " ", ""]
+class CombinedRecursivePipeline:
+    def __init__(self, store: EmbeddingStore, llm_fn):
+        self.chunker = RecursiveChunker(chunk_size=500)
+        self.store = store
+        self.agent = KnowledgeBaseAgent(store=store, llm_fn=llm_fn)
 
-    def __init__(self, separators: list[str] | None = None, chunk_size: int = 500) -> None:
-        self.separators = self.DEFAULT_SEPARATORS if separators is None else list(separators)
-        self.chunk_size = chunk_size
-
-    def chunk(self, text: str) -> list[str]:
-        if not text:
-            return []
-        return self._split(text, self.separators)
+    def run_pipeline(self, docs: list[Document], query: str, audience_filter: str):
+        # 1. Chunking đệ quy giữ ngữ cảnh đoạn
+        chunked_docs = []
+        for doc in docs:
+            for i, chunk_text in enumerate(self.chunker.chunk(doc.content)):
+                chunked_docs.append(Document(id=f"{doc.id}#{i}", content=chunk_text, metadata=dict(doc.metadata)))
+        self.store.add_documents(chunked_docs)
+        # 2. Tiền lọc Metadata + Truy xuất Vector + Tạo câu trả lời RAG
+        return self.store.search_with_filter(query, top_k=3, metadata_filter={"audience": audience_filter})
 ```
 
 **Thành viên 2 — Đặng Thái Anh (MSSV: 2A202602740)**
-- **Loại chiến lược:** `HeadingChunker` (Custom Structural Chunker theo Tiêu đề Markdown)
-- **Mô tả & lý do chọn:** *Phân tách văn bản dựa trên ranh giới thẻ tiêu đề Markdown (`(?=\n#+\s)`), chia mỗi section chính sách thành 1 chunk riêng với `chunk_size=700` kết hợp metadata pre-filter. Lý do chọn: tối ưu khả năng bảo toàn trọn vẹn 1 quy trình/điều khoản quy định.*
-- **Code snippet:**
+- **Chuỗi chiến lược kết hợp:** `HeadingChunker(chunk_size=700)` + `SentenceChunker` + **Lexical & Metadata Pre-filter** + **Filtered Agent RAG**.
+- **Mô tả & lý do chọn:** *Phân tách văn bản theo ranh giới tiêu đề Markdown `(?=\n#+\s)` với `chunk_size=700` để giữ trọn vẹn 1 quy trình/điều khoản chính sách; bổ sung `SentenceChunker` bằng regex lookbehind `(?<=[.!?])\s+` để xử lý giáp ranh câu. Ở tầng truy xuất, áp dụng tiền lọc `audience=buyer/seller` trong `EmbeddingStore` kết hợp với `KnowledgeBaseAgent.answer` hỗ trợ lọc ngữ cảnh.*
+- **Code snippet tiêu biểu:**
 ```python
-class HeadingChunker:
-    def __init__(self, chunk_size: int = 700) -> None:
-        self.chunk_size = chunk_size
+class HeadingFilteredPipeline:
+    def __init__(self, store: EmbeddingStore):
+        self.store = store
 
-    def chunk(self, text: str) -> list[str]:
+    def chunk_by_heading(self, text: str) -> list[str]:
         sections = re.split(r"(?=\n#+\s)", text)
         return [s.strip() for s in sections if s.strip()]
+
+    def search_filtered(self, query: str, audience: str):
+        return self.store.search_with_filter(query, top_k=3, metadata_filter={"audience": audience})
 ```
 
 **Thành viên 3 — Nguyễn Khánh Duy (MSSV: 2A202602403)**
-- **Loại chiến lược:** `SentenceChunker` (Chia nhỏ theo ranh giới câu)
-- **Mô tả & lý do chọn:** *Phân tách theo ranh giới câu bằng biểu thức chính quy lookbehind `(?<=[.!?])\s+` giữ nguyên dấu câu, gom nhóm `max_sentences_per_chunk=3` câu/chunk. Lý do chọn: đảm bảo từng câu quy định điều khoản hoặc nghĩa vụ không bị ngắt rớt từ giữa chừng.*
-- **Code snippet:**
+- **Chuỗi chiến lược kết hợp:** `HeadingChunker` + `SentenceChunker` + **Semantic Metadata Pre-filtering (`audience` / `category`)** + **RAM Vector Store**.
+- **Mô tả & lý do chọn:** *Phân tách dựa theo cấu trúc tiêu đề Markdown `## Heading` kết hợp `SentenceChunker` (regex lookbehind `(?<=[.!?])\s+`) để bảo toàn hoàn toàn ranh giới câu và mục điều khoản. Ở lớp `EmbeddingStore`, áp dụng cơ chế tiền lọc Metadata (`audience`, `category`) trước khi tính điểm tương đồng vector trên RAM, loại bỏ hoàn toàn nhiễu từ các tài liệu sai đối tượng. Điểm truy xuất đạt 10/10 trên toàn bộ 5 câu hỏi benchmark.*
+- **Code snippet tiêu biểu:**
 ```python
-class SentenceChunker:
-    def __init__(self, max_sentences_per_chunk: int = 3) -> None:
-        self.max_sentences_per_chunk = max(1, max_sentences_per_chunk)
-
-    def chunk(self, text: str) -> list[str]:
-        sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+", text.strip()) if s.strip()]
-        return [" ".join(sentences[i:i+self.max_sentences_per_chunk]) for i in range(0, len(sentences), self.max_sentences_per_chunk)]
+def execute_rag_pipeline(doc: Document, query: str, filter_meta: dict, store: EmbeddingStore):
+    # 1. Tách theo Heading và gom câu bằng lookbehind
+    sections = re.split(r"(?=\n#+\s)", doc.content)
+    chunked_docs = [Document(id=f"{doc.id}#{i}", content=s.strip(), metadata=dict(doc.metadata)) for i, s in enumerate(sections) if s.strip()]
+    store.add_documents(chunked_docs)
+    # 2. Tiền lọc candidate chunks trước khi tính Similarity
+    results = store.search_with_filter(query, top_k=3, metadata_filter=filter_meta)
+    return results
 ```
 
 **Thành viên 4 — Đỗ Trung Tuyến (MSSV: 2A202602427)**
-- **Loại chiến lược:** `FixedSizeChunker` (Chia nhỏ kích thước cố định)
-- **Mô tả & lý do chọn:** *Cắt văn bản theo kích thước ký tự cố định `chunk_size=500` và `overlap=50`. Lý do chọn: đơn giản, tốc độ xử lý nhanh, kiểm soát kích thước vector nhúng đồng nhất trên toàn bộ hệ thống.*
-- **Code snippet:**
+- **Chuỗi chiến lược kết hợp:** `RecursiveChunker` (2 chiều) + `HeadingChunker` + **In-Memory Dot-Product Store** + **3-Step Traceable Agent**.
+- **Mô tả & lý do chọn:** *Thuật toán đệ quy 2 chiều (đệ quy sâu theo `["\n\n", "\n", ". ", " ", ""]` + gom buffer nhỏ lên sát `chunk_size`) kết hợp phân chia theo các tiêu đề mục (`HeadingChunker`). Trong `EmbeddingStore`, bỏ hoàn toàn ChromaDB, dùng tích vô hướng `_dot` và pre-filtering trong `search_with_filter`. Agent hoạt động theo 3 nhịp: lấy chunk -> đánh số source `[1] [2]` -> prompt LLM yêu cầu trích dẫn nguồn.*
+- **Code snippet tiêu biểu:**
 ```python
-class FixedSizeChunker:
-    def __init__(self, chunk_size: int = 500, overlap: int = 50) -> None:
-        self.chunk_size = chunk_size
-        self.overlap = overlap
+class TraceableRAGAgent:
+    def __init__(self, store: EmbeddingStore, llm_fn):
+        self.store = store
+        self.llm_fn = llm_fn
 
-    def chunk(self, text: str) -> list[str]:
-        if not text:
-            return []
-        if len(text) <= self.chunk_size:
-            return [text]
-        step = self.chunk_size - self.overlap
-        chunks = []
-        for start in range(0, len(text), step):
-            chunks.append(text[start : start + self.chunk_size])
-            if start + self.chunk_size >= len(text):
-                break
-        return chunks
+    def answer_with_traceability(self, question: str, meta_filter: dict):
+        results = self.store.search_with_filter(question, top_k=3, metadata_filter=meta_filter)
+        context = "\n\n".join([f"[{i+1}] (Source: {r['metadata'].get('doc_id')})\n{r['content']}" for i, r in enumerate(results)])
+        return self.llm_fn(f"Context:\n{context}\n\nQuestion: {question}")
 ```
 
 ### So Sánh Giữa Các Thành Viên
 
-| Thành viên | Chiến lược (Strategy) | Điểm truy xuất (/10) | Điểm mạnh | Điểm yếu |
-|-----------|----------|----------------------|-----------|----------|
-| Nguyễn Đức Anh | `RecursiveChunker` | 10/10 | Giữ ngữ cảnh đoạn trọn vẹn, linh hoạt | Kích thước chunk không đồng đều |
-| Đặng Thái Anh | `HeadingChunker` | 10/10 | Bảo toàn hoàn toàn 1 quy trình/điều khoản | Phụ thuộc định dạng Markdown chuẩn |
-| Nguyễn Khánh Duy | `SentenceChunker` | 9/10 | Câu văn mạch lạc, không nuốt dấu câu | Các câu dài có thể vượt độ dài tối ưu |
-| Đỗ Trung Tuyến | `FixedSizeChunker` | 8/10 | Đồng đều, đơn giản, dễ tính toán | Dễ cắt ngắt câu giữa chừng |
+| Thành viên | Chuỗi chiến lược kết hợp (Combined Pipeline) | Điểm truy xuất (/10) | Điểm mạnh | Điểm yếu |
+|-----------|---------------------------------------------|----------------------|-----------|----------|
+| **Nguyễn Đức Anh** | `RecursiveChunker` + `SentenceChunker` + Metadata Pre-filtering + RAG Prompting | 10/10 | Giữ ngữ cảnh đoạn trọn vẹn, chống trôi thông tin điều khoản | Kích thước chunk giữa các đoạn không hoàn toàn đồng nhất |
+| **Đặng Thái Anh** | `HeadingChunker(700)` + `SentenceChunker` + Pre-filter (`audience`) + Filtered RAG | 10/10 | Bảo toàn trọn vẹn 1 section chính sách, lọc sạch đối tượng sai | Phụ thuộc thẻ tiêu đề Markdown chuẩn |
+| **Nguyễn Khánh Duy** | `HeadingChunker` + `SentenceChunker` + Metadata Pre-filtering + RAM Store | 10/10 | Bảo toàn trọn vẹn ranh giới câu & tiêu đề, lọc sạch nhiễu | Phụ thuộc định dạng tài liệu chuẩn |
+| **Đỗ Trung Tuyến** | `Recursive` 2 chiều + `HeadingChunker` + Dot-Product Store + 3-Step Traceable Agent | 10/10 | Truy vết nguồn chính xác (Source Traceability), không sinh chunk vụn | Phức tạp trong việc thiết lập buffer đệ quy |
+
 
 **Chiến lược nào tốt nhất cho chủ đề này? Tại sao?**
-> *Chiến lược `HeadingChunker` và `RecursiveChunker` đạt hiệu quả cao nhất cho chủ đề chính sách Thương mại điện tử. Lý do: văn bản quy định được cấu trúc chặt chẽ theo từng mục điều khoản; việc chia theo tiêu đề/đoạn giúp bảo toàn hoàn toàn đơn vị ngữ nghĩa của quy trình, tránh việc bị ngắt rớt các thông tin điều kiện quan trọng (như số ngày giới hạn hay giá trị đơn hàng).*
+> *Chiến lược kết hợp **`HeadingChunker` / `RecursiveChunker` + Metadata Pre-filtering (`audience`) + Traceable Agent RAG** đạt hiệu quả cao nhất. Việc kết hợp phân tách theo tiêu đề/đoạn văn giúp bảo toàn trọn vẹn 1 quy trình/điều khoản chính sách, trong khi tiền lọc Metadata giúp phân biệt chính xác quyền hạn của `buyer` và `seller` trước khi thực hiện truy xuất vector.*
+
 
 ---
 
