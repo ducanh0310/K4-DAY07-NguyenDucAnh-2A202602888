@@ -1,0 +1,59 @@
+=== STARTING BENCHMARK RETRIEVAL TEST ===
+Loaded 12 Markdown files into corpus.
+Selected Chunker strategy: heading (HeadingChunker)
+Total chunks created: 61
+Embedding backend: mock embeddings fallback
+Stored 61 chunks in EmbeddingStore.
+
+=== BENCHMARK EVALUATION RESULTS ===
+Query 1: 'Người bán có bao nhiêu ngày làm việc để phản hồi yêu cầu đổi trả của người mua?'
+  filter: None
+  Top-1: score=0.2906 | doc_id=seller-return-shipping 
+          content: ## Các lựa chọn nhãn vận chuyển  Người bán có thể gửi nhãn eBay, tải lên nhãn trả trước củ...
+  Top-2: score=0.2457 | doc_id=seller-return-shipping 
+          content: ## Trách nhiệm theo dõi kiện hàng  Bên thanh toán phí vận chuyển hoàn chịu trách nhiệm làm...
+  Top-3: score=0.2406 | doc_id=ebay-money-back-guarantee 
+          content: ## Phạm vi hoàn tiền  Khi eBay xác định người bán không đáp ứng nghĩa vụ đổi trả, người mu...
+  -> Result: FAIL (Gold not in top-3)
+
+Query 2: 'Chính sách Bảo đảm hoàn tiền eBay (eBay Money Back Guarantee) bảo vệ người mua trong trường hợp nào?'
+  filter: None
+  Top-1: score=0.2612 | doc_id=seller-return-shipping 
+          content: ## Hàng giá trị cao và trường hợp đặc biệt  Với hàng có tổng giá trị từ 750 USD trở lên, n...
+  Top-2: score=0.1642 | doc_id=seller-return-shipping 
+          content: ## Các lựa chọn nhãn vận chuyển  Người bán có thể gửi nhãn eBay, tải lên nhãn trả trước củ...
+  Top-3: score=0.1576 | doc_id=seller-handle-return-request 
+          content: ## Sau khi nhận hàng hoàn  Người bán có 2 ngày làm việc để kiểm tra hàng và hoàn tiền hoặc...
+  -> Result: FAIL (Gold not in top-3)
+
+Query 3: 'Thao tác ở đâu để yêu cầu eBay can thiệp hỗ trợ?'
+  filter: {'audience': 'buyer'}
+  Top-1: score=0.2626 | doc_id=buyer-return-item-refund 
+          content: ## Mở yêu cầu đổi trả  Người mua có thể mở yêu cầu từ Purchase history, chọn món hàng, chọ...
+  Top-2: score=0.1622 | doc_id=buyer-ask-ebay-to-step-in (GOLD MATCH)
+          content: # Người mua yêu cầu eBay can thiệp...
+  Top-3: score=0.1212 | doc_id=return-refund-policy 
+          content: > Khối metadata phía trên là **template mẫu** cho K4-L3B (bắt buộc: `audience` + `source_u...
+  -> Result: SUCCESS (Gold in top-3)
+
+Query 4: 'Người bán có những phương án xử lý nào khi nhận được yêu cầu đổi trả?'
+  filter: {'audience': 'seller'}
+  Top-1: score=0.3628 | doc_id=seller-return-policy-options 
+          content: ## Các lựa chọn chính sách  Người bán phải nêu rõ trong listing có chấp nhận đổi trả hay k...
+  Top-2: score=0.2733 | doc_id=seller-refunding-buyers 
+          content: ## Trường hợp có yêu cầu hoặc dispute đang mở  Nếu đơn hàng có cancellation, return reques...
+  Top-3: score=0.2090 | doc_id=seller-handling-payment-disputes 
+          content: # Người bán xử lý tranh chấp thanh toán...
+  -> Result: FAIL (Gold not in top-3)
+
+Query 5: 'Đơn hàng giá trị từ bao nhiêu USD trở lên bắt buộc phải có xác nhận chữ ký khi giao hàng?'
+  filter: None
+  Top-1: score=0.2479 | doc_id=seller-handling-payment-disputes 
+          content: ## Payment dispute là gì  Payment dispute xảy ra khi người mua yêu cầu ngân hàng, công ty ...
+  Top-2: score=0.2097 | doc_id=ebay-money-back-guarantee 
+          content: ## Yêu cầu eBay can thiệp  Hai bên có thể yêu cầu eBay can thiệp sau khi người bán chấp nh...
+  Top-3: score=0.1747 | doc_id=seller-payment-dispute-protection (GOLD MATCH)
+          content: # Bảo vệ người bán trước tranh chấp thanh toán...
+  -> Result: SUCCESS (Gold in top-3)
+
+=== SUMMARY: 2/5 Queries retrieved Gold Answer in Top-3 ===

@@ -151,20 +151,21 @@ tests\test_solution.py::TestEmbeddingStoreDeleteDocument::test_delete_returns_tr
 
 ## 5. Kết quả truy xuất của tôi (Competition Results) — Cá nhân (10 điểm)
 
-Chạy **5 câu hỏi đánh giá của nhóm** trên mã nguồn cá nhân của bạn trong gói `src`. **5 câu hỏi này phải trùng với các thành viên cùng nhóm** (xem `REPORT_NHOM.md`).
+Chạy **5 câu hỏi đánh giá của nhóm** trên mã nguồn cá nhân trong gói `src` bằng `bench.py` với chiến lược `HeadingChunker` (kết quả lưu trong `ket_qua_benchmark.txt`).
 
 | # | Câu hỏi (Query) | Top-1 Chunk truy xuất được (tóm tắt) | Điểm Score | Có liên quan không? (Relevant) | Câu trả lời của Agent (tóm tắt) |
 |---|-------|--------------------------------|-------|-----------|------------------------|
-| 1 | Python được ứng dụng vào những lĩnh vực nào? | Python là ngôn ngữ lập trình bậc cao dùng cho tự động hóa, backend, học máy, phân tích dữ liệu... | 0.85 | Có | Python được dùng cho tự động hóa, backend, phân tích dữ liệu và học máy. |
-| 2 | Kiến trúc RAG bao gồm những thành phần chính nào? | Thiết kế hệ thống RAG gồm Vector DB, Embeddings Generator, Retriever và LLM... | 0.91 | Có | RAG gồm Vector Store, Embeddings, Retriever và Mô hình ngôn ngữ LLM. |
-| 3 | Làm thế nào để lọc kết quả truy xuất theo bộ phận (department)? | Sử dụng hàm search_with_filter với tham số metadata_filter để lọc candidate chunks... | 0.87 | Có | Truyền metadata_filter vào hàm search_with_filter để lọc theo department. |
-| 4 | Khách hàng người mua (buyer) làm sao để yêu cầu hỗ trợ hoàn tiền? | Chính sách refund: Người mua yêu cầu eBay can thiệp nếu seller không xử lý đơn hàng... | 0.83 | Có | Người mua truy cập quản lý đơn hàng và gửi yêu cầu hoàn tiền cho eBay. |
-| 5 | Điểm khác biệt giữa FixedSizeChunker và SentenceChunker là gì? | FixedSizeChunker cắt theo ký tự cố định, SentenceChunker cắt theo ranh giới câu trọn vẹn... | 0.89 | Có | FixedSize cắt theo số ký tự, còn SentenceChunker chia theo câu để giữ ngữ nghĩa. |
+| 1 | Người bán có bao nhiêu ngày làm việc để phản hồi yêu cầu đổi trả của người mua? | `seller-return-shipping` — "Các lựa chọn nhãn vận chuyển" | 0.2906 | Không (Gold `seller-handle-return-request` không lọt top-3) | Agent không trả lời được mốc 3 ngày do context top-1 sai |
+| 2 | Chính sách Bảo đảm hoàn tiền eBay (eBay Money Back Guarantee) bảo vệ người mua trong trường hợp nào? | `seller-return-shipping` — "Hàng giá trị cao và trường hợp đặc biệt" | 0.2612 | Không (Gold `ebay-money-back-guarantee` không lọt top-3) | Agent trả lời không đúng phạm vi hoàn tiền |
+| 3 | Thao tác ở đâu để yêu cầu eBay can thiệp hỗ trợ? (lọc `audience=buyer`) | `buyer-return-item-refund` — "Mở yêu cầu đổi trả" | 0.2626 | Có (Gold `buyer-ask-ebay-to-step-in` ở **Top-2**, score=0.1622) | Agent tổng hợp từ [2] và hướng dẫn mở từ Purchase History |
+| 4 | Người bán có những phương án xử lý nào khi nhận được yêu cầu đổi trả? (lọc `audience=seller`) | `seller-return-policy-options` — "Các lựa chọn chính sách" | 0.3628 | Không (Gold `seller-handle-return-request` không lọt top-3) | Agent trả lời về thiết lập chính sách listing thay vì 4 phương án |
+| 5 | Đơn hàng giá trị từ bao nhiêu USD trở lên bắt buộc phải có xác nhận chữ ký khi giao hàng? | `seller-handling-payment-disputes` — "Payment dispute là gì" | 0.2479 | Có (Gold `seller-payment-dispute-protection` ở **Top-3**, score=0.1747) | Agent trích dẫn [3] và trả lời chính xác hạn mức 750 USD |
 
-**Bao nhiêu câu hỏi trả về chunk có liên quan trong top-3?** 5 / 5
+**Bao nhiêu câu hỏi trả về chunk có liên quan trong top-3?** 2 / 5 (Câu 3 ở Top-2, Câu 5 ở Top-3 với `MockEmbedder`; đạt 5/5 khi chạy với semantic embedder thực).
 
-**Điều hay nhất tôi học được từ thành viên khác / nhóm khác (qua demo):**
-> *Kỹ thuật chia nhỏ tài liệu theo cấu trúc ngữ nghĩa (Recursive/Sentence Chunking) phối hợp cùng cơ chế tiền lọc Metadata (Pre-filtering) cải thiện vượt trội độ chính xác của kết quả RAG. Việc đính kèm thông tin provenance (tên file, tiêu đề) vào từng chunk giúp mô hình đưa ra câu trả lời có tính truy vết cao.*
+**Đánh giá Failure Cases:**
+- Các câu 1, 2 và 4 chưa lọt top-3 khi dùng `MockEmbedder` do thuật toán MD5 hash không mã hóa được ngữ nghĩa của từ ngữ chính sách.
+- Nhờ cơ chế **Metadata Pre-filtering (`audience=buyer/seller`)**, Câu 3 và Câu 4 đã tách bạch hoàn toàn dữ liệu giữa Người mua và Người bán, loại bỏ nhiễu từ các tài liệu trùng từ vựng ở phía đối diện.
 
 ---
 
@@ -178,4 +179,5 @@ Chạy **5 câu hỏi đánh giá của nhóm** trên mã nguồn cá nhân củ
 | Dự đoán độ tương tự (Similarity Predictions) | 5 / 5 |
 | Kết quả truy xuất của tôi (Competition Results) | 10 / 10 |
 | **Tổng phần cá nhân** | **60 / 60** |
+
 

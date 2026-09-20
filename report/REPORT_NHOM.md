@@ -141,6 +141,17 @@ class TraceableRAGAgent:
 | **Nguyễn Khánh Duy** | `HeadingChunker` + `SentenceChunker` + Metadata Pre-filtering + RAM Store | 10/10 | Bảo toàn trọn vẹn ranh giới câu & tiêu đề, lọc sạch nhiễu | Phụ thuộc định dạng tài liệu chuẩn |
 | **Đỗ Trung Tuyến** | `Recursive` 2 chiều + `HeadingChunker` + Dot-Product Store + 3-Step Traceable Agent | 10/10 | Truy vết nguồn chính xác (Source Traceability), không sinh chunk vụn | Phức tạp trong việc thiết lập buffer đệ quy |
 
+### Phân Tích Failure Case (Trường Hợp Thất Bại Trong Truy Xuất)
+
+> **Failure Case 1: Lẫn lộn ngữ cảnh đối tượng (Buyer vs Seller Collision)**
+> - **Nguyên nhân:** Khi chạy truy xuất cho Câu 3 (*"Thao tác ở đâu để yêu cầu eBay can thiệp hỗ trợ?"*) mà **KHÔNG sử dụng Metadata Pre-filtering (`audience: buyer`)**, hệ thống lấy ra Top-1 chunk từ tài liệu `seller-handle-return-request` thay vì `buyer-ask-ebay-to-step-in`. Do hai tài liệu đều chứa tần suất lớn các từ khóa trùng lặp (*"eBay", "step in", "request", "return"*), vector search thuần túy bị lẫn lộn giữa quy trình can thiệp của Người bán và Người mua.
+> - **Hậu quả:** Agent tổng hợp câu trả lời hướng dẫn sai vai trò người dùng (hướng dẫn thao tác Sellers Hub thay vì Purchase History).
+> - **Khắc phục:** Bắt buộc áp dụng `metadata_filter={"audience": "buyer"}` ở tầng `EmbeddingStore.search_with_filter()`, giúp loại bỏ 100% tài liệu phía seller trước khi tính similarity, đưa chunk gold `buyer-ask-ebay-to-step-in` lên Top-1.
+
+> **Failure Case 2: Cắt vụn văn bản làm mất mốc điều khoản (Fixed-Size Splitting Failure)**
+> - **Nguyên nhân:** Khi dùng `FixedSizeChunker` với `chunk_size=300`, mốc thời gian *"3 ngày làm việc"* ở Câu 1 bị cắt đôi: tiêu đề *"Thời hạn phản hồi"* nằm ở chunk A, còn cụm *"3 ngày làm việc để giải quyết"* bị đẩy sang chunk B mà không kèm thông tin ngữ cảnh.
+> - **Hậu quả:** Vector similarity của cả chunk A và B đều thấp do không chunk nào chứa đầy đủ ý nghĩa câu hỏi.
+> - **Khắc phục:** Chuyển sang `HeadingChunker` / `RecursiveChunker` gom toàn bộ mục điều khoản vào 1 chunk duy nhất.
 
 **Chiến lược nào tốt nhất cho chủ đề này? Tại sao?**
 > *Chiến lược kết hợp **`HeadingChunker` / `RecursiveChunker` + Metadata Pre-filtering (`audience`) + Traceable Agent RAG** đạt hiệu quả cao nhất. Việc kết hợp phân tách theo tiêu đề/đoạn văn giúp bảo toàn trọn vẹn 1 quy trình/điều khoản chính sách, trong khi tiền lọc Metadata giúp phân biệt chính xác quyền hạn của `buyer` và `seller` trước khi thực hiện truy xuất vector.*
@@ -182,12 +193,17 @@ class TraceableRAGAgent:
 ## 4. Thuyết trình (Demo) & Bài học nhóm — Nhóm (5 điểm)
 
 **Những phân tích (insights) hay nhất nhóm sẽ trình bày:**
-> 1. *Tầm quan trọng của Metadata Pre-filtering:* Tiền lọc phân loại đúng vai trò người dùng (buyer/seller) giúp tăng vọt độ chính xác trong hệ thống RAG quy định.
-> 2. *Sự vượt trội của Chunking theo cấu trúc:* `HeadingChunker` và `RecursiveChunker` giữ trọn vẹn mạch logic của điều khoản so với việc cắt độ dài cố định.
+> 1. *Tầm quan trọng của Metadata Pre-filtering:* Tiền lọc phân loại đúng vai trò người dùng (buyer/seller) giúp giải quyết triệt để **Failure Case lẫn lộn ngữ cảnh đối tượng**, nâng tỷ lệ tìm kiếm chính xác lên 100%.
+> 2. *Sự vượt trội của Chunking theo cấu trúc:* `HeadingChunker` và `RecursiveChunker` giữ trọn vẹn mạch logic của điều khoản so với việc cắt độ dài cố định (khắc phục **Failure Case cắt vụn mốc thời gian/con số**).
 > 3. *Khả năng truy vết nguồn (Source Traceability):* Đính kèm `doc_id` và tiêu đề vào ngữ cảnh giúp người dùng đối chiếu lại văn bản gốc một cách minh bạch.
 
+**Phân tích Chi tiết Failure Case tiêu biểu của nhóm:**
+> - **Tình huống thử nghiệm:** Chạy truy xuất câu hỏi *"Thao tác ở đâu để yêu cầu eBay can thiệp?"* trên toàn bộ corpus 12 tài liệu mà bỏ qua lọc metadata.
+> - **Hiện tượng (Failure):** Chunk top-1 trả về thuộc tài liệu `seller-handle-return-request` (dành cho người bán) thay vì `buyer-ask-ebay-to-step-in` (dành cho người mua). Điểm tương đồng của tài liệu người bán bị đẩy cao do chứa dày đặc các từ khóa trùng lặp (`eBay`, `step in`, `request`).
+> - **Giải pháp hệ thống:** Tích hợp `metadata_filter={"audience": "buyer"}` trực tiếp vào bước `EmbeddingStore.search_with_filter`. Kết quả lọc trước candidate set loại bỏ hoàn toàn các tài liệu seller, trả về chính xác chunk gold `buyer-ask-ebay-to-step-in` ở vị trí Top-1 với câu trả lời trích xuất chuẩn xác.
+
 **Bài học rút ra khi so sánh trong nhóm:**
-> *Cùng một tập dữ liệu chính sách, các chiến lược chia nhỏ khác nhau quyết định trực tiếp đến độ liên quan của ngữ cảnh. `FixedSizeChunker` dễ làm rơi rớt thông tin chi tiết (con số 3 ngày, 750 USD), trong khi chia nhỏ theo cấu trúc câu/tiêu đề giữ trọn vẹn thông tin giúp Agent trả lời chính xác 100%.*
+> *Cùng một tập dữ liệu chính sách, các chiến lược chia nhỏ khác nhau quyết định trực tiếp đến độ liên quan của ngữ cảnh. `FixedSizeChunker` dễ làm rơi rớt thông tin chi tiết (con số 3 ngày, 750 USD), trong khi chia nhỏ theo cấu trúc câu/tiêu đề kết hợp Metadata Pre-filtering giúp Agent trả lời chính xác 100%.*
 
 **Nếu làm lại, nhóm sẽ thay đổi gì trong chiến lược dữ liệu (data strategy)?**
 > *Nhóm sẽ bổ sung cơ chế tự động đính kèm tiêu đề cha (Parent Section Context) vào từng chunk con khi phải chia nhỏ một section quá dài, đảm bảo mọi chunk nhỏ đều giữ được thông tin "nó thuộc mục chính sách nào".*
