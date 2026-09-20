@@ -60,23 +60,41 @@ Chạy `ChunkingStrategyComparator().compare()` trên 2-3 tài liệu:
 
 ### Chiến lược của từng thành viên
 
-**Thành viên 1 — Nguyễn Đức Anh**
-- **Loại chiến lược:** `RecursiveChunker`
-- **Mô tả & lý do chọn cho chủ đề này:** *Áp dụng chia đệ quy theo các separator ưu tiên (`\n\n`, `\n`, `. `, ` `, `""`) và gom các mảnh nhỏ liền kề sát ngưỡng `chunk_size`. Lý do chọn: giữ nguyên vẹn nội dung của từng đoạn điều khoản chính sách E-commerce mà không sinh ra các chunk vụn.*
+**Thành viên 1 — Nguyễn Đức Anh (MSSV: 2A202602888)**
+- **Loại chiến lược:** `RecursiveChunker` (Chia nhỏ đệ quy)
+- **Mô tả & lý do chọn cho chủ đề này:** *Áp dụng chia đệ quy theo danh sách separator ưu tiên (`["\n\n", "\n", ". ", " ", ""]`) và gom các mảnh nhỏ liền kề sát ngưỡng `chunk_size=500`. Lý do chọn: giữ nguyên vẹn nội dung ngữ cảnh của từng đoạn điều khoản chính sách E-commerce mà không sinh ra các chunk vụn.*
 - **Code snippet:**
 ```python
 class RecursiveChunker:
+    DEFAULT_SEPARATORS = ["\n\n", "\n", ". ", " ", ""]
+
     def __init__(self, separators: list[str] | None = None, chunk_size: int = 500) -> None:
-        self.separators = separators or ["\n\n", "\n", ". ", " ", ""]
+        self.separators = self.DEFAULT_SEPARATORS if separators is None else list(separators)
         self.chunk_size = chunk_size
 
     def chunk(self, text: str) -> list[str]:
+        if not text:
+            return []
         return self._split(text, self.separators)
 ```
 
-**Thành viên 2 — Đặng Thái Anh**
-- **Loại chiến lược:** `SentenceChunker`
-- **Mô tả & lý do chọn:** *Phân tách theo ranh giới câu bằng biểu thức chính quy `(?<=[.!?])\s+`. Lý do chọn: đảm bảo từng câu quy định điều khoản hoặc nghĩa vụ được giữ trọn vẹn, không bị mất từ ngắt câu.*
+**Thành viên 2 — Đặng Thái Anh (MSSV: 2A202602740)**
+- **Loại chiến lược:** `HeadingChunker` (Custom Structural Chunker theo Tiêu đề Markdown)
+- **Mô tả & lý do chọn:** *Phân tách văn bản dựa trên ranh giới thẻ tiêu đề Markdown (`(?=\n#+\s)`), chia mỗi section chính sách thành 1 chunk riêng với `chunk_size=700` kết hợp metadata pre-filter. Lý do chọn: tối ưu khả năng bảo toàn trọn vẹn 1 quy trình/điều khoản quy định.*
+- **Code snippet:**
+```python
+class HeadingChunker:
+    def __init__(self, chunk_size: int = 700) -> None:
+        self.chunk_size = chunk_size
+
+    def chunk(self, text: str) -> list[str]:
+        sections = re.split(r"(?=\n#+\s)", text)
+        return [s.strip() for s in sections if s.strip()]
+```
+
+**Thành viên 3 — Nguyễn Khánh Duy (MSSV: 2A202602403)**
+- **Loại chiến lược:** `SentenceChunker` (Chia nhỏ theo ranh giới câu)
+- **Mô tả & lý do chọn:** *Phân tách theo ranh giới câu bằng biểu thức chính quy lookbehind `(?<=[.!?])\s+` giữ nguyên dấu câu, gom nhóm `max_sentences_per_chunk=3` câu/chunk. Lý do chọn: đảm bảo từng câu quy định điều khoản hoặc nghĩa vụ không bị ngắt rớt từ giữa chừng.*
 - **Code snippet:**
 ```python
 class SentenceChunker:
@@ -88,36 +106,38 @@ class SentenceChunker:
         return [" ".join(sentences[i:i+self.max_sentences_per_chunk]) for i in range(0, len(sentences), self.max_sentences_per_chunk)]
 ```
 
-**Thành viên 3 — Nguyễn Khánh Duy**
-- **Loại chiến lược:** `FixedSizeChunker`
-- **Mô tả & lý do chọn:** *Cắt văn bản theo độ dài ký tự cố định `chunk_size=500` và `overlap=50`. Lý do chọn: đơn giản, tốc độ xử lý nhanh, kiểm soát kích thước vector nhúng đồng nhất.*
+**Thành viên 4 — Đỗ Trung Tuyến (MSSV: 2A202602427)**
+- **Loại chiến lược:** `FixedSizeChunker` (Chia nhỏ kích thước cố định)
+- **Mô tả & lý do chọn:** *Cắt văn bản theo kích thước ký tự cố định `chunk_size=500` và `overlap=50`. Lý do chọn: đơn giản, tốc độ xử lý nhanh, kiểm soát kích thước vector nhúng đồng nhất trên toàn bộ hệ thống.*
 - **Code snippet:**
 ```python
 class FixedSizeChunker:
     def __init__(self, chunk_size: int = 500, overlap: int = 50) -> None:
         self.chunk_size = chunk_size
         self.overlap = overlap
-```
 
-**Thành viên 4 — Đỗ Trung Tuyến**
-- **Loại chiến lược:** `HeadingChunker` (Custom Structure)
-- **Mô tả & lý do chọn:** *Tách văn bản dựa theo các thẻ tiêu đề Markdown (`#`, `##`). Mỗi mục chính sách là một đơn vị ngữ nghĩa trọn vẹn. Lý do chọn: tối ưu khả năng truy xuất chính xác từng quy trình quy định.*
-- **Code snippet:**
-```python
-class HeadingChunker:
     def chunk(self, text: str) -> list[str]:
-        sections = re.split(r"(?=\n#+\s)", text)
-        return [s.strip() for s in sections if s.strip()]
+        if not text:
+            return []
+        if len(text) <= self.chunk_size:
+            return [text]
+        step = self.chunk_size - self.overlap
+        chunks = []
+        for start in range(0, len(text), step):
+            chunks.append(text[start : start + self.chunk_size])
+            if start + self.chunk_size >= len(text):
+                break
+        return chunks
 ```
 
 ### So Sánh Giữa Các Thành Viên
 
 | Thành viên | Chiến lược (Strategy) | Điểm truy xuất (/10) | Điểm mạnh | Điểm yếu |
 |-----------|----------|----------------------|-----------|----------|
-| Nguyễn Đức Anh | `RecursiveChunker` | 10/10 | Giữ ngữ cảnh đoạn trọn vẹn, linh hoạt | Độ dài chunk không đồng đều |
-| Đặng Thái Anh | `SentenceChunker` | 9/10 | Câu văn mạch lạc, không nuốt dấu câu | Các câu dài có thể vượt độ dài tối ưu |
-| Nguyễn Khánh Duy | `FixedSizeChunker` | 8/10 | Đồng đều, đơn giản, dễ tính toán | Dễ cắt ngắt câu giữa chừng |
-| Đỗ Trung Tuyến | `HeadingChunker` | 10/10 | Bảo toàn hoàn toàn 1 quy trình/điều khoản | Phụ thuộc định dạng Markdown chuẩn |
+| Nguyễn Đức Anh | `RecursiveChunker` | 10/10 | Giữ ngữ cảnh đoạn trọn vẹn, linh hoạt | Kích thước chunk không đồng đều |
+| Đặng Thái Anh | `HeadingChunker` | 10/10 | Bảo toàn hoàn toàn 1 quy trình/điều khoản | Phụ thuộc định dạng Markdown chuẩn |
+| Nguyễn Khánh Duy | `SentenceChunker` | 9/10 | Câu văn mạch lạc, không nuốt dấu câu | Các câu dài có thể vượt độ dài tối ưu |
+| Đỗ Trung Tuyến | `FixedSizeChunker` | 8/10 | Đồng đều, đơn giản, dễ tính toán | Dễ cắt ngắt câu giữa chừng |
 
 **Chiến lược nào tốt nhất cho chủ đề này? Tại sao?**
 > *Chiến lược `HeadingChunker` và `RecursiveChunker` đạt hiệu quả cao nhất cho chủ đề chính sách Thương mại điện tử. Lý do: văn bản quy định được cấu trúc chặt chẽ theo từng mục điều khoản; việc chia theo tiêu đề/đoạn giúp bảo toàn hoàn toàn đơn vị ngữ nghĩa của quy trình, tránh việc bị ngắt rớt các thông tin điều kiện quan trọng (như số ngày giới hạn hay giá trị đơn hàng).*
